@@ -359,6 +359,9 @@ def DXHTTPRequest(resource, data, method='POST', headers=None, auth=True, timeou
                     if rewind_input_buffer_offset is not None:
                         data.seek(rewind_input_buffer_offset)
                     delay = 2 ** retry
+                    # don't warn if first retry? don't warn at all for retries?
+                    if not isinstance(e, exceptions.ContentLengthError):
+                        pass
                     logger.warn("%s %s: %s. Waiting %d seconds before retry %d of %d..." % (method, url, str(e), delay,
                                                                                             retry+1, max_retries))
                     time.sleep(delay)
