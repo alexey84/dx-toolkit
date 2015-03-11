@@ -4435,6 +4435,70 @@ class TestDXCp(DXTestCase):
         rm_project(proj_id)
 
 
+# This test checks that moving a folder between projects does not cause
+# data loss. The overall sequence of operations is, roughly, as follows:
+#    1) Create a 2-level folder tree in project-A
+#    2) Copy the entire tree to project-B
+#    3) Remove the original folder tree from project-A
+#  The expected result is to get the same directory structure
+#  in project-B. PTFM-14589 describes a case where a user
+#  lost data in this way, the result was empty sub-folders.
+#
+# A variation is to first copy a sub-folder, and then the root folder.
+# This works as follows:
+#    1) Create the following folder structure in project-A
+#        R/
+#          F1/
+#             X
+#          F2/
+#             Y
+#    2) Copy folder F2 to project-B
+#    3) Copy folder R to project-B
+# This should result in an empty folder
+#
+class TestDXCopyFolderTree(DXTestCase):
+    @classmethod
+    def setUpClass(cls):
+        # setup two projects
+        cls.proj_id1 = create_project()
+        cls.proj_id2 = create_project()
+        cls.counter = 1
+
+    @classmethod
+    def tearDownClass(cls):
+        rm_project(cls.proj_id1)
+        rm_project(cls.proj_id2)
+
+    @classmethod
+    def gen_uniq_fname(cls):
+        cls.counter += 1
+        return "file_{}".format(cls.counter)
+
+    # 'dx cp' used to give a confusing error message when source file is not found.
+    # Check that this has been fixed
+    def test_cp_rm(self):
+        fname1 = self.gen_uniq_fname()
+        file_id1 = create_file_in_project(fname1, self.proj_id1)
+
+        # 1) Create the original tree
+        create_folder_in_project(self.proj_id1,    "/R")
+        create_folder_in_project(self.proj_id1,    "/R/F1")
+        create_file_in_project("X", self.proj_id1, "/R/F1")
+        create_folder_in_project(self.proj_id1,    "/R/F2")
+        create_file_in_project("Y", self.proj_id1, "/R/F2")
+
+        # 2) Copy directory structure to second project
+        run("dx cp {p1}:/R {p2}:/".format(p1=self.proj_id1, p2=self.proj_id2))
+
+        # 3) Erase original
+        run("dx rm -r '{p1}:/{f}'".format(p1=self.proj_id1, f="R"))
+
+        # 4) Check that we haven't lost anything
+        run("dx ls {p2}".format(p2=self.proj_id2))
+        run("dx ls {p2}:/R".format(p2=self.proj_id2))
+        run("dx ls {p2}:/R/F1".format(p2=self.proj_id2))
+        run("dx ls {p2}:/R/F2".format(p2=self.proj_id2))
+
 if __name__ == '__main__':
     if 'DXTEST_FULL' not in os.environ:
         sys.stderr.write('WARNING: env var DXTEST_FULL is not set; tests that create apps or run jobs will not be run\n')
