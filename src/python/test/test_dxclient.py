@@ -4495,7 +4495,6 @@ class TestDXCopyFolderTree(DXTestCase):
         run("dx rm -r '{p1}:/{f}'".format(p1=self.proj_id1, f="R"))
 
         # 4) Check that we haven't lost anything
-        #run("dx ls {p2}".format(p2=self.proj_id2))
         self.ls_and_verify(self.proj_id2, "", ["R/"])
         self.ls_and_verify(self.proj_id2, "R", ["F1/", "F2/"])
         self.ls_and_verify(self.proj_id2, "R/F1", ["V", "W"])
