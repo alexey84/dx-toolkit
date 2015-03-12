@@ -4449,43 +4449,44 @@ class TestDXCp(DXTestCase):
 #    1) Create the following folder structure in project-A
 #        R/
 #          F1/
-#             X
+#             [V, W]
 #          F2/
-#             Y
+#             [Y, Z]
 #    2) Copy folder F2 to project-B
 #    3) Copy folder R to project-B
 # This should result in an empty folder
 #
 class TestDXCopyFolderTree(DXTestCase):
-    @classmethod
-    def setUpClass(cls):
+    def setUp(self):
         # setup two projects
-        cls.proj_id1 = create_project()
-        cls.proj_id2 = create_project()
-        cls.counter = 1
+        self.proj_id1 = create_project()
+        self.proj_id2 = create_project()
 
-    @classmethod
-    def tearDownClass(cls):
-        rm_project(cls.proj_id1)
-        rm_project(cls.proj_id2)
+    def tearDown(self):
+        rm_project(self.proj_id1)
+        rm_project(self.proj_id2)
 
-    @classmethod
-    def gen_uniq_fname(cls):
-        cls.counter += 1
-        return "file_{}".format(cls.counter)
-
-    # 'dx cp' used to give a confusing error message when source file is not found.
-    # Check that this has been fixed
-    def test_cp_rm(self):
-        fname1 = self.gen_uniq_fname()
-        file_id1 = create_file_in_project(fname1, self.proj_id1)
-
-        # 1) Create the original tree
+    def create_file_tree(self):
         create_folder_in_project(self.proj_id1,    "/R")
         create_folder_in_project(self.proj_id1,    "/R/F1")
-        create_file_in_project("X", self.proj_id1, "/R/F1")
+        create_file_in_project("V", self.proj_id1, "/R/F1")
+        create_file_in_project("W", self.proj_id1, "/R/F1")
         create_folder_in_project(self.proj_id1,    "/R/F2")
         create_file_in_project("Y", self.proj_id1, "/R/F2")
+        create_file_in_project("Z", self.proj_id1, "/R/F2")
+
+    # list a directory, and make sure it has the correct contents
+    # note: sort lists, so order does not matter
+    def ls_and_verify(self, proj_id, dirname, expected_list):
+        listing = run("dx ls {p}:/{d}".format(p=proj_id, d=dirname)).split("\n")
+        listing = filter(bool, listing)
+        list.sort(expected_list)
+        list.sort(listing)
+        self.assertEqual(expected_list, listing)
+
+    def test_cp_rm(self):
+        # 1) Create the original tree
+        self.create_file_tree()
 
         # 2) Copy directory structure to second project
         run("dx cp {p1}:/R {p2}:/".format(p1=self.proj_id1, p2=self.proj_id2))
@@ -4494,10 +4495,43 @@ class TestDXCopyFolderTree(DXTestCase):
         run("dx rm -r '{p1}:/{f}'".format(p1=self.proj_id1, f="R"))
 
         # 4) Check that we haven't lost anything
-        run("dx ls {p2}".format(p2=self.proj_id2))
-        run("dx ls {p2}:/R".format(p2=self.proj_id2))
-        run("dx ls {p2}:/R/F1".format(p2=self.proj_id2))
-        run("dx ls {p2}:/R/F2".format(p2=self.proj_id2))
+        #run("dx ls {p2}".format(p2=self.proj_id2))
+        self.ls_and_verify(self.proj_id2, "", ["R/"])
+        self.ls_and_verify(self.proj_id2, "R", ["F1/", "F2/"])
+        self.ls_and_verify(self.proj_id2, "R/F1", ["V", "W"])
+        self.ls_and_verify(self.proj_id2, "R/F2", ["Y", "Z"])
+
+    # check what happens if we copy a subdirectory, and then the root
+    def test_cp_rm2(self):
+        # 1) Create the original tree
+        self.create_file_tree()
+
+        # 2) Copy subdirectory and then root
+        run("dx cp {p1}:/R/F1 {p2}:/".format(p1=self.proj_id1, p2=self.proj_id2))
+        run("dx cp {p1}:/R {p2}:/".format(p1=self.proj_id1, p2=self.proj_id2))
+
+        # 3) Erase original
+        run("dx rm -r '{p1}:/{f}'".format(p1=self.proj_id1, f="R"))
+
+        # Note, compared with regular filesystems something weird is
+        # happening here. Files V and W have moved from /R/F1 to /F1,
+        # and there is an empty directory in /R/F1.
+        #
+        #        F1/
+        #          [V, W]
+        #        R/
+        #          F1/
+        #          F2/
+        #             [Y, Z]
+
+        # 4) Check that we haven't lost anything
+        #
+        self.ls_and_verify(self.proj_id2, "", ["R/", "F1/"])
+        self.ls_and_verify(self.proj_id2, "R", ["F1/", "F2/"])
+        self.ls_and_verify(self.proj_id2, "F1", ["V", "W"])
+        self.ls_and_verify(self.proj_id2, "R/F1", [])
+        self.ls_and_verify(self.proj_id2, "R/F2", ["Y", "Z"])
+
 
 if __name__ == '__main__':
     if 'DXTEST_FULL' not in os.environ:
